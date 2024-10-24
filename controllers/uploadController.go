@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 
 	"cloud.google.com/go/storage" // Import for ACL handling
 	firebase "firebase.google.com/go/v4"
@@ -20,8 +22,27 @@ type FirebaseStorage struct {
 // Initialize Firebase
 func NewFirebaseStorage() (*FirebaseStorage, error) {
 	ctx := context.Background()
-	// Set the path to your Firebase service account key file
-	sa := option.WithCredentialsFile("configs/serviceAccountKey.json")
+
+	serviceAccountBase64 := os.Getenv("SERVICE_ACCOUNT_KEY")
+	if serviceAccountBase64 == "" {
+		log.Fatal("SERVICE_ACCOUNT_KEY is not set")
+		return nil, fmt.Errorf("service account key not set")
+	}
+
+	decodedKey, err := base64.StdEncoding.DecodeString(serviceAccountBase64)
+	if err != nil {
+		log.Fatalf("Failed to decode service account key: %v", err)
+		return nil, err
+	}
+
+	tempFilePath := "configs/serviceAccountKey.json"
+	err = os.WriteFile(tempFilePath, decodedKey, 0644)
+	if err != nil {
+		log.Fatalf("Failed to write service account key file: %v", err)
+		return nil, err
+	}
+
+	sa := option.WithCredentialsFile(tempFilePath)
 	app, err := firebase.NewApp(ctx, nil, sa)
 	if err != nil {
 		log.Fatalf("Failed to initialize Firebase App: %v", err)
@@ -59,8 +80,8 @@ func (fs *FirebaseStorage) UploadImage(c *gin.Context) {
 	bucket, err := client.Bucket(bucketName)
 
 	if err != nil {
-		log.Println("Failed to get Specify the bucket name:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Specify the bucket name"})
+		log.Println("Failed to get bucket:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get bucket"})
 		return
 	}
 	log.Printf("Using bucket: %s", bucketName)
