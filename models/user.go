@@ -5,10 +5,10 @@ import "time"
 type User struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Name      string    `gorm:"not null" json:"name"`
-	Username  string    `gorm:"unique;not null" json:"user_name"`
+	Username  string    `gorm:"unique;not null" json:"userName"`
 	Password  string    `gorm:"not null" json:"password"`
 	Photo     string    `gorm:"size:255" json:"image"`
-	RoleID    uint      `gorm:"not null" json:"role_id"`
+	RoleID    uint      `gorm:"not null" json:"roleId"`
 	Role      string    `json:"role"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

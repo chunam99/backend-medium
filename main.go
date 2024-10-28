@@ -33,11 +33,12 @@ func main() {
 	r.Use(config.SetupCORS())
 
 	routes.SetupRouter(r)
+	log.Println("Attempting to start server on :8386...")
 	err = r.Run(":8386")
 	if err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	} else {
-		log.Println("Server running on :8386")
+		log.Println("Server started on :8386")
 	}
 
 }

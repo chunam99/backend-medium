@@ -9,6 +9,7 @@ import (
 )
 
 func SetupRouter(r *gin.Engine) {
+	log.Println("Setting up routes...")
 
 	firebaseStorage, err := controllers.NewFirebaseStorage()
 	if err != nil {
@@ -31,4 +32,6 @@ func SetupRouter(r *gin.Engine) {
 		authorized.PUT("/posts/:id", controllers.UpdatePost)
 		authorized.DELETE("/posts/:id", controllers.DeletePost)
 	}
+	log.Println("Routes setup complete.")
+
 }

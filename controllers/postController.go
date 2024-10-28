@@ -26,7 +26,7 @@ func GetAllPosts(c *gin.Context) {
 
 	offset := (pageNum - 1) * perPageNum
 
-	if err := config.DB.Preload("User").Limit(perPageNum).Offset(offset).Find(&posts).Error; err != nil {
+	if err := config.DB.Preload("User").Preload("Tags").Limit(perPageNum).Offset(offset).Find(&posts).Error; err != nil {
 		c.JSON(500, gin.H{"error": "Could not retrieve posts"})
 		return
 	}
@@ -43,6 +43,7 @@ func GetAllPosts(c *gin.Context) {
 			"image":       post.Image,
 			"pinned":      post.Pinned,
 			"claps":       post.Claps,
+			"tags":        post.Tags,
 			"comment":     post.Comment,
 			"created_at":  post.CreatedAt,
 			"updated_at":  post.UpdatedAt,
@@ -70,12 +71,30 @@ func GetPostByID(c *gin.Context) {
 	postID := c.Param("id")
 	var post models.Post
 
-	if err := config.DB.Preload("User").Where("id = ?", postID).First(&post).Error; err != nil {
+	if err := config.DB.Preload("User").Preload("Tags").Where("id = ?", postID).First(&post).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": post})
+	userResponse := models.ToUserResponse(post.User)
+
+	postResponse := map[string]interface{}{
+		"id":          post.ID,
+		"title":       post.Title,
+		"description": post.Description,
+		"content":     post.Content,
+		"image":       post.Image,
+		"pinned":      post.Pinned,
+		"claps":       post.Claps,
+		"tags":        post.Tags,
+		"comment":     post.Comment,
+		"created_at":  post.CreatedAt,
+		"updated_at":  post.UpdatedAt,
+		"user":        userResponse,
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": postResponse})
+
 }
 
 func CreatePost(c *gin.Context) {
@@ -86,8 +105,6 @@ func CreatePost(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid form data", "details": err.Error()})
 		return
 	}
-
-	log.Printf("Parsed Data: %+v", request)
 
 	image, err := c.FormFile("image")
 	if err == nil {
@@ -102,11 +119,27 @@ func CreatePost(c *gin.Context) {
 
 	userID := userIDInterface.(uint)
 
+	var tags []models.Tag
+	for _, tagName := range request.Tags {
+		var tag models.Tag
+
+		if err := config.DB.Where("name = ?", tagName).First(&tag).Error; err != nil {
+			tag = models.Tag{Name: tagName}
+			if err := config.DB.Create(&tag).Error; err != nil {
+				log.Println("Error creating tag:", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create tag"})
+				return
+			}
+		}
+		tags = append(tags, tag)
+	}
+
 	post := models.Post{
 		Title:       request.Title,
 		Description: request.Description,
 		Content:     request.Content,
 		UserID:      userID,
+		Tags:        tags,
 	}
 
 	log.Println("userData.ID", userID)
