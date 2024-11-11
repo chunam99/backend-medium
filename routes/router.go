@@ -28,6 +28,7 @@ func SetupRouter(r *gin.Engine) {
 	authorized := r.Group("/")
 	authorized.Use(middleware.AuthMiddleware())
 	{
+		authorized.POST("/posts/:id/clap", controllers.ClapPost)
 		authorized.POST("/posts", controllers.CreatePost)
 		authorized.PUT("/posts/:id", controllers.UpdatePost)
 		authorized.DELETE("/posts/:id", controllers.DeletePost)

@@ -53,7 +53,6 @@ func GetAllPosts(c *gin.Context) {
 		postResponses = append(postResponses, postResponse)
 	}
 
-	// Trả về dữ liệu với phân trang
 	responses.PaginateResponse(c, postResponses, totalPosts, pageNum, perPageNum)
 }
 func GetPinnedPosts(c *gin.Context) {
@@ -211,49 +210,39 @@ func DeletePost(c *gin.Context) {
 
 func ClapPost(c *gin.Context) {
 	postIDStr := c.Param("id")
-	userID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return
-	}
-
 	postID, err := strconv.ParseUint(postIDStr, 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid post ID"})
 		return
 	}
 
-	var clap models.Clap
-	if err := config.DB.Where("post_id = ? AND user_id = ?", uint(postID), userID).First(&clap).Error; err != nil {
-
-		clap = models.Clap{
-			UserID: userID.(uint),
-			PostID: uint(postID),
-			Count:  0,
-		}
+	var requestBody struct {
+		Claps int `json:"claps"`
 	}
-
-	clap.Count += 1
-
-	if err := config.DB.Save(&clap).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not save clap"})
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
 	var post models.Post
-	if err := config.DB.Where("id = ?", uint(postID)).First(&post).Error; err != nil {
+	if err := config.DB.First(&post, uint(postID)).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
 		return
 	}
 
-	post.Claps += 1
+	post.Claps += uint(requestBody.Claps)
 
 	if err := config.DB.Save(&post).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not update post claps"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not update claps"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Clapped successfully", "totalClaps": post.Claps, "userClaps": clap.Count})
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"message": "Clapped successfully",
+			"claps":   post.Claps,
+		},
+	})
 }
 
 func GetPostClaps(c *gin.Context) {
