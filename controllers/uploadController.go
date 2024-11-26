@@ -1,17 +1,21 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"io"
 	"log"
 	"net/http"
 	"os"
 
-	"cloud.google.com/go/storage" // Import for ACL handling
+	"cloud.google.com/go/storage"
 	firebase "firebase.google.com/go/v4"
 	"github.com/gin-gonic/gin"
+	"github.com/nfnt/resize"
 	"google.golang.org/api/option"
 )
 
@@ -53,6 +57,27 @@ func NewFirebaseStorage() (*FirebaseStorage, error) {
 	return &FirebaseStorage{App: app}, nil
 }
 
+// ResizeImage resizes an image to a given width, maintaining aspect ratio
+func ResizeImage(file io.Reader, width uint) (io.Reader, error) {
+	// Decode the image
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image: %v", err)
+	}
+
+	// Resize the image
+	resizedImg := resize.Resize(width, 0, img, resize.Lanczos3)
+
+	// Encode the resized image into a buffer
+	buf := new(bytes.Buffer)
+	err = jpeg.Encode(buf, resizedImg, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode resized image: %v", err)
+	}
+
+	return buf, nil
+}
+
 // UploadImage handles image uploading to Firebase Storage
 func (fs *FirebaseStorage) UploadImage(c *gin.Context) {
 	// Retrieve the file from the request
@@ -66,6 +91,14 @@ func (fs *FirebaseStorage) UploadImage(c *gin.Context) {
 
 	log.Printf("File received: %s", header.Filename)
 
+	// Resize the image before uploading
+	resizedFile, err := ResizeImage(file, 800) // Resize to 800px width
+	if err != nil {
+		log.Println("Failed to resize image:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resize image"})
+		return
+	}
+
 	// Get the Firebase Storage client
 	ctx := context.Background()
 	client, err := fs.App.Storage(ctx)
@@ -78,7 +111,6 @@ func (fs *FirebaseStorage) UploadImage(c *gin.Context) {
 	// Specify the bucket name
 	bucketName := "blog-d2ef0.appspot.com"
 	bucket, err := client.Bucket(bucketName)
-
 	if err != nil {
 		log.Println("Failed to get bucket:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get bucket"})
@@ -94,9 +126,9 @@ func (fs *FirebaseStorage) UploadImage(c *gin.Context) {
 
 	// Create a new writer for the object
 	wc := object.NewWriter(ctx)
-	if _, err := io.Copy(wc, file); err != nil {
-		log.Println("Failed to copy file to Firebase Storage writer:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
+	if _, err := io.Copy(wc, resizedFile); err != nil {
+		log.Println("Failed to copy resized image to Firebase Storage writer:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload resized image"})
 		return
 	}
 

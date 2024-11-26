@@ -2,6 +2,7 @@ package controllers
 
 import (
 	config "backend/configs"
+	"strconv"
 
 	"backend/models"
 	"backend/responses"
@@ -120,5 +121,105 @@ func LoginUser(c *gin.Context) {
 			"username": user.Username,
 			"photo":    user.Photo,
 		},
+	})
+}
+
+func GetAllUsers(c *gin.Context) {
+	type UserResponse struct {
+		ID       uint   `json:"id"`
+		Name     string `json:"name"`
+		Username string `json:"username"`
+		Photo    string `json:"photo"`
+		Role     string `json:"role"`
+	}
+
+	page := c.DefaultQuery("page", "1")
+	perPage := c.DefaultQuery("per_page", "10")
+
+	pageNum, err := strconv.Atoi(page)
+	if err != nil || pageNum < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+		return
+	}
+
+	perPageNum, err := strconv.Atoi(perPage)
+	if err != nil || perPageNum < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid per_page number"})
+		return
+	}
+
+	if perPageNum > 100 {
+		perPageNum = 100
+	}
+
+	var totalUsers int64
+	if err := config.DB.Model(&models.User{}).Count(&totalUsers).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count users"})
+		return
+	}
+
+	offset := (pageNum - 1) * perPageNum
+
+	var users []models.User
+	if err := config.DB.
+		Limit(perPageNum).
+		Offset(offset).
+		Order("created_at DESC").
+		Find(&users).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		return
+	}
+
+	var response []UserResponse
+	for _, user := range users {
+		response = append(response, UserResponse{
+			ID:       user.ID,
+			Name:     user.Name,
+			Username: user.Username,
+			Photo:    user.Photo,
+			Role:     user.Role,
+		})
+	}
+
+	responses.PaginateResponse(c, response, totalUsers, pageNum, perPageNum)
+
+}
+
+func UpdateUserRole(c *gin.Context) {
+
+	userID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	var request struct {
+		Role string `json:"role" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	if request.Role != "admin" && request.Role != "user" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid role value"})
+		return
+	}
+
+	var user models.User
+	if err := config.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	user.Role = request.Role
+	if err := config.DB.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user role"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "User role updated successfully",
+		"user":    user,
 	})
 }

@@ -21,12 +21,21 @@ func GetAllPosts(c *gin.Context) {
 	pageNum, _ := strconv.Atoi(page)
 	perPageNum, _ := strconv.Atoi(perPage)
 
+	if perPageNum > 100 {
+		perPageNum = 100
+	}
+
 	var totalPosts int64
 	config.DB.Model(&models.Post{}).Count(&totalPosts)
 
 	offset := (pageNum - 1) * perPageNum
 
-	if err := config.DB.Preload("User").Preload("Tags").Limit(perPageNum).Offset(offset).Find(&posts).Error; err != nil {
+	if err := config.DB.Preload("User").
+		Preload("Tags").
+		Order("created_at DESC").
+		Limit(perPageNum).
+		Offset(offset).
+		Find(&posts).Error; err != nil {
 		c.JSON(500, gin.H{"error": "Could not retrieve posts"})
 		return
 	}
@@ -55,15 +64,46 @@ func GetAllPosts(c *gin.Context) {
 
 	responses.PaginateResponse(c, postResponses, totalPosts, pageNum, perPageNum)
 }
+
 func GetPinnedPosts(c *gin.Context) {
 	var posts []models.Post
 
-	if err := config.DB.Preload("User").Where("pinned = ?", true).Find(&posts).Error; err != nil {
+	if err := config.DB.Preload("User").
+		Preload("Tags").
+		Where("pinned = ?", true).
+		Order("claps DESC").
+		Find(&posts).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not retrieve pinned posts"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"pinnedPosts": posts})
+	var postResponses []map[string]interface{}
+	for _, post := range posts {
+		userResponse := models.ToUserResponse(post.User)
+
+		postResponse := map[string]interface{}{
+			"id":          post.ID,
+			"title":       post.Title,
+			"description": post.Description,
+			"content":     post.Content,
+			"image":       post.Image,
+			"pinned":      post.Pinned,
+			"claps":       post.Claps,
+			"tags":        post.Tags,
+			"comment":     post.Comment,
+			"created_at":  post.CreatedAt,
+			"updated_at":  post.UpdatedAt,
+			"user":        userResponse,
+		}
+
+		postResponses = append(postResponses, postResponse)
+	}
+
+	log.Println("postResponses", postResponses)
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": postResponses,
+	})
 }
 
 func GetPostByID(c *gin.Context) {
@@ -93,7 +133,6 @@ func GetPostByID(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": postResponse})
-
 }
 
 func CreatePost(c *gin.Context) {

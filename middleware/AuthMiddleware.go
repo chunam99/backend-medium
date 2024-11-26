@@ -12,7 +12,8 @@ import (
 var jwtKey = []byte("cvn.dev.jwt.key.2024")
 
 type Claims struct {
-	UserID uint `json:"sub"`
+	UserID uint   `json:"sub"`
+	Role   string `json:"role"`
 	jwt.StandardClaims
 }
 
@@ -30,10 +31,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			tokenString = tokenString[7:]
 		}
 
-		claims := &Claims{
-			UserID:         0,
-			StandardClaims: jwt.StandardClaims{},
-		}
+		claims := &Claims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 			return jwtKey, nil
 		})
@@ -44,7 +42,27 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		c.Set("userID", claims.UserID)
+		c.Set("user", claims)
+		c.Next()
+	}
+}
+
+func AdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, exists := c.Get("user")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			c.Abort()
+			return
+		}
+
+		claims, ok := user.(*Claims)
+		if !ok || claims.Role != "admin" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+			c.Abort()
+			return
+		}
+
 		c.Next()
 	}
 }

@@ -16,7 +16,6 @@ func SetupRouter(r *gin.Engine) {
 		log.Fatalf("Failed to initialize Firebase Storage: %v", err)
 	}
 
-	// Define the upload route
 	r.POST("/upload", firebaseStorage.UploadImage)
 	r.POST("/register", controllers.RegisterUser)
 	r.POST("/login", controllers.LoginUser)
@@ -33,6 +32,17 @@ func SetupRouter(r *gin.Engine) {
 		authorized.PUT("/posts/:id", controllers.UpdatePost)
 		authorized.DELETE("/posts/:id", controllers.DeletePost)
 	}
-	log.Println("Routes setup complete.")
 
+	r.POST("/admin/login", controllers.LoginAdmin)
+	admin := r.Group("/admin")
+	admin.Use(middleware.AuthMiddleware())
+	admin.Use(middleware.AdminMiddleware())
+	{
+
+		admin.GET("/users", controllers.GetAllUsers)
+		admin.PUT("/users/:id/role", controllers.UpdateUserRole)
+
+	}
+
+	log.Println("Routes setup complete.")
 }
